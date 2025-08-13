@@ -81,6 +81,27 @@ export default function Home() {
     }
   };
 
+  const updateText = async (id: number, newText: string) => {
+    try {
+      setError(null);
+      const trimmed = newText.trim();
+      if (!trimmed) throw new Error('Todo text cannot be empty');
+
+      const response = await fetch(`/api/todos/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: trimmed })
+      });
+
+      if (!response.ok) throw new Error('Failed to update todo');
+
+      const updatedTodo = await response.json();
+      setTodos(prev => prev.map(t => t.id === id ? updatedTodo : t));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update todo');
+    }
+  };
+
   const remove = async (id: number) => {
     try {
       setError(null);
@@ -182,7 +203,7 @@ export default function Home() {
       ) : (
         <ul className="space-y-3">
           {todos.map(todo => (
-            <TodoItem key={todo.id} todo={todo} toggleDone={toggleDone} remove={remove} />
+            <TodoItem key={todo.id} todo={todo} toggleDone={toggleDone} remove={remove} updateText={updateText} />
           ))}
         </ul>
       )}
