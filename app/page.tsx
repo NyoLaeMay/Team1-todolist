@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import TodoItem from './components/TodoItem';
 import LoadingSpinner from './components/LoadingSpinner';
 
@@ -7,19 +7,60 @@ interface Todo {
   id: number;
   text: string;
   done: boolean;
+  deadline?: string; // ISO string for deadline
 }
 
 export default function Home() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [text, setText] = useState('');
+  const [deadline, setDeadline] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Fetch todos on component mount
   useEffect(() => {
     fetchTodos();
   }, []);
+
+  // Focus input on mount and after todos load
+  useEffect(() => {
+    if (!loading && inputRef.current) {
+      // Small delay to ensure DOM is fully rendered
+      const timer = setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
+
+  // Focus input after todos change (when adding new todos)
+  useEffect(() => {
+    if (todos.length > 0 && inputRef.current && !loading) {
+      // Focus input after todos are updated
+      const timer = setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [todos.length, loading]);
+
+  // Update deadline timers every minute
+  useEffect(() => {
+    if (todos.some(todo => todo.deadline)) {
+      const interval = setInterval(() => {
+        // Force re-render to update timers
+        setTodos(prev => [...prev]);
+      }, 60000); // Update every minute
+      
+      return () => clearInterval(interval);
+    }
+  }, [todos]);
 
   const fetchTodos = async () => {
     try {
@@ -45,7 +86,10 @@ export default function Home() {
       const response = await fetch('/api/todos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ 
+          text,
+          deadline: deadline || undefined
+        })
       });
       
       if (!response.ok) throw new Error('Failed to add todo');
@@ -53,6 +97,7 @@ export default function Home() {
       const newTodo = await response.json();
       setTodos(prev => [...prev, newTodo]);
       setText('');
+      setDeadline('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add todo');
     } finally {
@@ -113,18 +158,89 @@ export default function Home() {
     }
   };
 
+  const updateTodoText = async (id: number, newText: string) => {
+    try {
+      setError(null);
+      const response = await fetch(`/api/todos/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: newText })
+      });
+      if (!response.ok) throw new Error('Failed to update todo');
+      const updatedTodo = await response.json();
+      setTodos(prev => prev.map(t => t.id === id ? updatedTodo : t));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update todo');
+    }
+  };
+
+  const updateTodoDeadline = async (id: number, newDeadline: string) => {
+    try {
+      setError(null);
+      const response = await fetch(`/api/todos/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deadline: newDeadline })
+      });
+      if (!response.ok) throw new Error('Failed to update todo deadline');
+      const updatedTodo = await response.json();
+      setTodos(prev => prev.map(t => t.id === id ? updatedTodo : t));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update todo deadline');
+    }
+  };
+
+  const saveTodoEdits = async (id: number, newText: string, newDeadline: string) => {
+    try {
+      setError(null);
+      const response = await fetch(`/api/todos/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: newText, deadline: newDeadline })
+      });
+      if (!response.ok) throw new Error('Failed to save todo edits');
+      const updatedTodo = await response.json();
+      setTodos(prev => prev.map(t => t.id === id ? updatedTodo : t));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save todo edits');
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       addTodo();
     }
   };
 
+  // Format deadline timer display
+  const formatDeadlineTimer = (deadline: string) => {
+    const now = new Date();
+    const deadlineDate = new Date(deadline);
+    const diff = deadlineDate.getTime() - now.getTime();
+    
+    if (diff <= 0) {
+      return 'Overdue';
+    }
+    
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (days > 0) {
+      return `${days}d ${hours}h remaining`;
+    } else if (hours > 0) {
+      return `${hours}h ${minutes}m remaining`;
+    } else {
+      return `${minutes}m remaining`;
+    }
+  };
+
   if (loading) {
     return (
       <main className="max-w-xl mx-auto p-4 font-sans">
-        <div className="flex flex-col justify-center items-center h-64 space-y-4">
+        <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-8 flex flex-col justify-center items-center space-y-4">
           <LoadingSpinner size="lg" />
-          <div className="text-lg text-gray-600">Loading todos...</div>
+          <div className="text-lg text-gray-600 dark:text-gray-300">Loading todos...</div>
         </div>
       </main>
     );
@@ -132,60 +248,89 @@ export default function Home() {
 
   return (
     <main className="max-w-xl mx-auto p-4 font-sans">
-      <h1 className="text-3xl font-bold mb-6 text-center text-gray-800">✅ Todo List</h1>
+      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-6 md:p-8">
+        <h1 className="text-3xl font-bold mb-6 text-center text-gray-800 dark:text-gray-100">✅ Todo List</h1>
       
-      {/* Error Display */}
-      {error && (
-        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-          {error}
-        </div>
-      )}
+        {/* Error Display */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 rounded">
+            {error}
+          </div>
+        )}
       
-      {/* Add Todo Form */}
-      <div className="flex gap-2 mb-6">
-        <input 
-          value={text} 
-          onChange={e => setText(e.target.value)} 
-          onKeyPress={handleKeyPress}
-          placeholder="What needs to be done?" 
-          className="border border-gray-300 p-3 flex-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          disabled={submitting}
-        />
-        <button 
-          onClick={addTodo} 
-          disabled={submitting || !text.trim()}
-          className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-        >
-          {submitting ? 'Adding...' : 'Add'}
-        </button>
-      </div>
-
-      {/* Clear All Button */}
-      {todos.length > 0 && (
-        <div className="mb-4">
+        {/* Add Todo Form */}
+        <div className="space-y-3 mb-6">
+        <div className="flex gap-2">
+          <input 
+            ref={inputRef}
+            value={text} 
+            onChange={e => setText(e.target.value)} 
+            onKeyPress={handleKeyPress}
+            placeholder="What needs to be done?" 
+            className="border border-gray-300 dark:border-gray-600 p-3 flex-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+            disabled={submitting}
+          />
           <button 
-            onClick={clearAll}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            onClick={addTodo} 
+            disabled={submitting || !text.trim()}
+            className="bg-blue-500 hover:bg-green-600 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors"
           >
-            Clear All ({todos.length})
+            {submitting ? 'Adding...' : 'Add'}
           </button>
         </div>
-      )}
-
-      {/* Todos List */}
-      {todos.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <div className="text-6xl mb-4">📝</div>
-          <div className="text-xl">No tasks yet!</div>
-          <div className="text-sm">Add a task above to get started</div>
+        <div className="flex gap-2">
+          <input 
+            type="datetime-local"
+            value={deadline || ''}
+            onChange={e => setDeadline(e.target.value)}
+            className="border border-gray-300 dark:border-gray-600 p-3 flex-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            placeholder="Set deadline (optional)"
+          />
+          <button 
+            onClick={() => setDeadline('')}
+            className="px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            Clear
+          </button>
         </div>
-      ) : (
-        <ul className="space-y-3">
-          {todos.map(todo => (
-            <TodoItem key={todo.id} todo={todo} toggleDone={toggleDone} remove={remove} />
-          ))}
-        </ul>
-      )}
+        </div>
+
+        {/* Clear All Button */}
+        {todos.length > 0 && (
+          <div className="mb-4">
+            <button 
+              onClick={clearAll}
+              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Clear All ({todos.length})
+            </button>
+          </div>
+        )}
+
+        {/* Todos List */}
+        {todos.length === 0 ? (
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+            <div className="text-6xl mb-4">📝</div>
+            <div className="text-xl">No tasks yet!</div>
+            <div className="text-sm">Add a task above to get started</div>
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {todos.map(todo => (
+              <TodoItem 
+                key={todo.id} 
+                todo={todo} 
+                toggleDone={toggleDone} 
+                remove={remove} 
+                updateTodoText={updateTodoText}
+                updateTodoDeadline={updateTodoDeadline}
+                saveTodoEdits={saveTodoEdits}
+                formatDeadlineTimer={formatDeadlineTimer}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
     </main>
   );
 }

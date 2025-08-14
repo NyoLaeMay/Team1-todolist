@@ -1,5 +1,6 @@
 import './globals.css';
-import { ReactNode } from 'react';
+import ThemeSwitch from './components/ThemeSwitch';
+import Script from 'next/script';
 
 export const metadata = {
   title: 'Next.js',
@@ -13,7 +14,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Script id="theme-init" strategy="beforeInteractive">{`(function(){try{var s=localStorage.getItem('theme');var m=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;if(s==='dark'||(!s&&m)){document.documentElement.classList.add('dark');}else{document.documentElement.classList.remove('dark');}}catch(e){}})();`}</Script>
+        <ThemeSwitch />
+        {children}
+      </body>
     </html>
   )
 }

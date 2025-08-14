@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateTodo, deleteTodo } from '../../../lib/todos';
 
-// PATCH /api/todos/:id - Update todo done status
+// PATCH /api/todos/:id - Update todo done status or text
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -9,9 +9,15 @@ export async function PATCH(
   try {
     const id = parseInt(params.id);
     const body = await request.json();
-    const { done } = body;
-
-    const updatedTodo = updateTodo(id, { done });
+    const { done, text, deadline } = body;
+    const updates: any = {};
+    if (typeof done !== 'undefined') updates.done = done;
+    if (typeof text !== 'undefined') updates.text = text;
+    if (typeof deadline !== 'undefined') {
+      // If deadline is empty string, set it to undefined to remove it
+      updates.deadline = deadline === '' ? undefined : deadline;
+    }
+    const updatedTodo = updateTodo(id, updates);
     
     if (!updatedTodo) {
       return NextResponse.json(

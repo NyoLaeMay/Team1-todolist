@@ -17,7 +17,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { text } = body;
+    const { text, deadline } = body;
 
     if (!text || !text.trim()) {
       return NextResponse.json(
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newTodo = addTodo(text);
+    const newTodo = addTodo(text, deadline);
     return NextResponse.json(newTodo, { status: 201 });
   } catch (error) {
     return NextResponse.json(
